@@ -11497,6 +11497,18 @@ declare class MultiCompiler {
 		infrastructureLog: MultiHook<
 			SyncBailHook<[string, string, undefined | any[]], true | void>
 		>;
+		validate: MultiHook<
+			AsyncSeriesHook<
+				[
+					(
+						value: object | object[],
+						schema: Schema,
+						options?: ValidationErrorConfiguration,
+						check?: (value?: any) => boolean
+					) => void
+				]
+			>
+		>;
 	}>;
 	compilers: Compiler[];
 	dependencies: WeakMap<Compiler, string[]>;
