@@ -1385,6 +1385,11 @@ export interface Experiments {
 	 */
 	html?: "auto" | boolean;
 	/**
+	 * Reuse the module graph across rebuilds and only rebuild modules affected by changes (incremental make).
+	 * @experimental
+	 */
+	incremental?: boolean;
+	/**
 	 * Compile entrypoints and import()s only when they are accessed.
 	 * @experimental
 	 */
@@ -3740,6 +3745,11 @@ export interface ExperimentsNormalized {
 	 * @experimental
 	 */
 	html?: "auto" | boolean;
+	/**
+	 * Reuse the module graph across rebuilds and only rebuild modules affected by changes (incremental make).
+	 * @experimental
+	 */
+	incremental?: boolean;
 	/**
 	 * Compile entrypoints and import()s only when they are accessed.
 	 * @experimental
