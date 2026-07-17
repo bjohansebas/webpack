@@ -1895,6 +1895,13 @@ declare class ChunkGraph {
 	): void;
 
 	/**
+	 * Clears a chunk's recorded full-hash and dependent-hash runtime modules, so a
+	 * stale set doesn't keep previous-build runtime modules (and their compilation)
+	 * alive on an incremental rebuild. Fresh runtime modules re-attach themselves.
+	 */
+	clearRuntimeModuleHashes(chunk: Chunk): void;
+
+	/**
 	 * Processes the provided old module.
 	 */
 	replaceModule(oldModule: Module, newModule: Module): void;
@@ -7669,6 +7676,17 @@ declare abstract class ExportInfo {
 	 */
 	setUsedWithoutInfo(runtime: RuntimeSpec): boolean;
 	setHasProvideInfo(): void;
+
+	/**
+	 * Resets provide-side info to the undetermined state (use info untouched).
+	 */
+	resetProvideInfo(): void;
+
+	/**
+	 * Resets the use-side info to the undetermined state (provide info untouched,
+	 * incl. the pure-provide bit) so FlagDependencyUsage can re-trace it.
+	 */
+	resetUseInfo(): void;
 	setHasUseInfo(): void;
 
 	/**
@@ -7892,6 +7910,21 @@ declare abstract class ExportsInfo {
 	 */
 	setRedirectNamedTo(exportsInfo?: ExportsInfo): boolean;
 	setHasProvideInfo(): void;
+
+	/**
+	 * Resets provide-side info so FlagDependencyExports can recompute it on an
+	 * incremental rebuild against the persisted module graph (which otherwise
+	 * keeps exports removed by the rebuild, since the plugin only merges).
+	 */
+	resetProvidedExports(): void;
+
+	/**
+	 * Resets the use-side info to the undetermined state so FlagDependencyUsage
+	 * can re-trace usage on an incremental rebuild. The persisted graph keeps a
+	 * module marked "used", which stops the trace re-queuing it, so exports newly
+	 * used by a changed importer would never be flagged.
+	 */
+	resetUsedExports(): void;
 	setHasUseInfo(): void;
 
 	/**
@@ -15550,6 +15583,18 @@ declare class Module extends DependenciesBlock {
 	cleanupForCache(): void;
 
 	/**
+	 * Re-acquire factory-derived helpers (parser/generator) for an incremental
+	 * rebuild so this compilation's plugin hooks apply. No-op unless overridden.
+	 */
+	restoreParserAndGenerator(normalModuleFactory?: any): void;
+
+	/**
+	 * Releases the cached parser between incremental rebuilds so it doesn't keep
+	 * the previous compilation alive. No-op unless overridden.
+	 */
+	cleanupParserForCache(): void;
+
+	/**
 	 * Gets the original source.
 	 */
 	originalSource(): null | Source;
@@ -15988,6 +16033,27 @@ declare class ModuleGraph {
 	removeConnection(dependency: Dependency): void;
 
 	/**
+	 * Removes every outgoing connection of `module` whose dependency is in
+	 * `staleDependencies`, including inactive ones left by `updateModule`
+	 * re-targeting (which the dependency-keyed `removeConnection` misses). Needed
+	 * when a module is rebuilt against a persisted graph so stale connections don't
+	 * linger in the old target's incoming set and crash seal-time plugins.
+	 */
+	removeStaleOutgoingConnections(
+		module: Module,
+		staleDependencies: Set<Dependency>
+	): void;
+
+	/**
+	 * Assigns `module`'s pending outgoing connections into the dependency map by
+	 * origin. `getConnection` normally does this lazily keyed by a dependency's
+	 * PARENT module; an incremental barrel un-lazy wires a re-export target from
+	 * the importer's walk, so the export dep's parent differs from its origin
+	 * barrel and the lazy flush never reaches it. Flush by origin to fix that.
+	 */
+	flushUnassignedConnections(module: Module): void;
+
+	/**
 	 * Adds the provided dependency to the module graph.
 	 */
 	addExplanation(dependency: Dependency, explanation: string): void;
@@ -16003,6 +16069,13 @@ declare class ModuleGraph {
 	removeModuleAttributes(module: Module): void;
 
 	/**
+	 * Removes a module from the graph entirely, detaching its connections. Used to
+	 * drop stale runtime modules on an incremental rebuild so the persisted graph
+	 * doesn't accumulate them.
+	 */
+	removeModule(module: Module): void;
+
+	/**
 	 * Removes all module attributes.
 	 */
 	removeAllModuleAttributes(): void;
@@ -16015,6 +16088,17 @@ declare class ModuleGraph {
 		newModule: Module,
 		filterConnection: (moduleGraphConnection: ModuleGraphConnection) => boolean
 	): void;
+
+	/**
+	 * Start recording connection moves so they can later be reversed (experiments.incremental).
+	 */
+	startMutationJournal(): void;
+
+	/**
+	 * Reverse all recorded connection moves, restoring the graph to its pre-seal
+	 * (end-of-make) state, then stop recording (experiments.incremental).
+	 */
+	restoreFromMutationJournal(): void;
 
 	/**
 	 * Copies outgoing module connections.
